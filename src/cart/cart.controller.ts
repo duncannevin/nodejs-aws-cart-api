@@ -25,6 +25,12 @@ export class CartController {
     private orderService: OrderService,
   ) {}
 
+  @Get('health')
+  healthCheck(): string {
+    console.log('Cart service health check');
+    return 'Cart service is healthy';
+  }
+
   // @UseGuards(JwtAuthGuard)
   @UseGuards(BasicAuthGuard)
   @Get()
