@@ -40,4 +40,5 @@ lerna-debug.log*
 .env
 
 cdk.out
+cdk.context.json
 ProductCartStack.template.yaml

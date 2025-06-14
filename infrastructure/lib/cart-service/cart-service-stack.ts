@@ -4,9 +4,11 @@ import * as rds from 'aws-cdk-lib/aws-rds';
 import * as ec2 from 'aws-cdk-lib/aws-ec2';
 import * as secretsManager from 'aws-cdk-lib/aws-secretsmanager';
 import { config } from 'dotenv';
+import { Injectable } from '@nestjs/common';
 
 config();
 
+@Injectable()
 export class CartServiceStack extends cdk.Stack {
   readonly cartFunction: lambda.Function;
   readonly databaseInstance: rds.DatabaseInstance;
@@ -31,25 +33,23 @@ export class CartServiceStack extends cdk.Stack {
       subnetConfiguration: [
         {
           cidrMask: 24,
-          name: 'Public',
+          name: 'PublicSubnet',
           subnetType: ec2.SubnetType.PUBLIC,
         },
       ],
     });
 
-    const rdsSecurityGroup = new ec2.SecurityGroup(this, 'RdsSecurityGroup', {
+    new ec2.InterfaceVpcEndpoint(this, 'SecretsManagerEndpoint', {
       vpc,
-      description: 'Allow database access',
-      allowAllOutbound: true,
+      service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
+      subnets: {
+        subnetType: ec2.SubnetType.PUBLIC,
+      },
+      privateDnsEnabled: true,
     });
 
-    rdsSecurityGroup.addIngressRule(
-      ec2.Peer.anyIpv4(),
-      ec2.Port.tcp(5432),
-      'Allow PostgreSQL access',
-    );
-
     this.databaseInstance = new rds.DatabaseInstance(this, 'CartPostgres', {
+      databaseName: process.env.DB_NAME!,
       engine: rds.DatabaseInstanceEngine.postgres({
         version: rds.PostgresEngineVersion.VER_11,
       }),
@@ -58,7 +58,6 @@ export class CartServiceStack extends cdk.Stack {
         ec2.InstanceSize.MICRO,
       ),
       vpc,
-      securityGroups: [rdsSecurityGroup],
       credentials: rds.Credentials.fromSecret(dbSecrets),
       vpcSubnets: {
         subnetType: ec2.SubnetType.PUBLIC,
@@ -74,29 +73,23 @@ export class CartServiceStack extends cdk.Stack {
       deletionProtection: false,
     });
 
-    const lambdaSecurityGroup = new ec2.SecurityGroup(
-      this,
-      'LambdaSecurityGroup',
-      {
-        vpc,
-        description: 'Allow Lambda access to RDS',
-        allowAllOutbound: true,
-      },
-    );
-
-    lambdaSecurityGroup.addIngressRule(
-      rdsSecurityGroup,
-      ec2.Port.tcp(5432),
-      'Allow Lambda to access PostgreSQL',
-    );
-
     this.cartFunction = new lambda.Function(this, 'ProductCartFunction', {
       runtime: lambda.Runtime.NODEJS_22_X,
       code: lambda.Code.fromAsset('dist'),
       handler: 'main.handler',
       vpc,
       allowPublicSubnet: true,
-      securityGroups: [lambdaSecurityGroup],
+      securityGroups: [this.databaseInstance.connections.securityGroups[0]],
+      timeout: cdk.Duration.seconds(30),
+      environment: {
+        DB_SECRET_NAME: dbSecrets.secretName,
+        DB_HOST: this.databaseInstance.dbInstanceEndpointAddress,
+        DB_PORT: this.databaseInstance.dbInstanceEndpointPort,
+        DB_NAME: process.env.DB_NAME!,
+        AUTH_USERNAME: process.env.AUTH_USERNAME!,
+        AUTH_PASSWORD: process.env.AUTH_PASSWORD!,
+        APP_URL: process.env.APP_URL!,
+      },
     });
 
     this.databaseInstance.connections.allowDefaultPortFrom(this.cartFunction);

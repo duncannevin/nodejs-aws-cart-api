@@ -6,7 +6,7 @@ import { bootstrapLambda } from './bootstrap-lambda';
 if (process.env.NODE_ENV === 'local') {
   async function bootstrap() {
     const app = await NestFactory.create(AppModule);
-    await app.listen(3000);
+    await app.listen(4200);
   }
 
   bootstrap();
