@@ -12,6 +12,9 @@ export class CartItem {
   @Column({ type: 'uuid', nullable: false })
   product_id: string;
 
+  @Column({ type: 'decimal', precision: 10, scale: 2, nullable: false })
+  price: number;
+
   @Column({ type: 'int', nullable: false })
   count: number;
 }
